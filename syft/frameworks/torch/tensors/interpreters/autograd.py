@@ -14,6 +14,7 @@ def backwards_grad(grad_fn, in_grad=None):
             "to see if it's missing."
         )
     back_grad = grad_fn(in_grad)
+    print('***', grad_fn.next_functions)
     for next_grad_fn, next_grad in zip(grad_fn.next_functions, back_grad):
         backwards_grad(next_grad_fn, next_grad)
 
@@ -124,7 +125,7 @@ class AutogradTensor(AbstractTensor):
     def __getattribute__(self, name):
         # Automatically attaching gradient functions if they are defined in the
         # gradients module.
-        grad_fn = getattr(gradients, name.capitalize() + "Backward", None)
+        grad_fn = get_backward_func(name)
 
         # print(f"getattribute {name}")
         if grad_fn is not None:
@@ -226,8 +227,8 @@ class AutogradTensor(AbstractTensor):
         # Check that the function has not been overwritten
         try:
             # Try to get recursively the attributes in cmd = "<attr1>.<attr2>.<attr3>..."
-            cmd = cls.rgetattr(cls, cmd)
-            return cmd(*args, **kwargs)
+            cmd2 = cls.rgetattr(cls, cmd)
+            return cmd2(*args, **kwargs)
         except AttributeError:
             pass
 
@@ -245,6 +246,15 @@ class AutogradTensor(AbstractTensor):
 
         # Put back AutogradTensor on the tensors found in the response
         response = syft.frameworks.torch.hook_args.hook_response(cmd, response, wrap_type=cls)
+
+
+        # print('check for', cmd)
+        # grad_fn = get_backward_func(cmd)
+        #
+        # # print(f"getattribute {name}")
+        # if grad_fn is not None:
+        #     response.grad_fn = grad_fn(*args, **kwargs)
+        #     response.grad_fn.result = response
 
         return response
 
@@ -265,3 +275,21 @@ class AutogradTensor(AbstractTensor):
         if isinstance(self.child, torch.Tensor) and not self.child.is_wrapper:
             return self.child
         return self
+
+
+backward_funcs = {
+    class_name[:-8].lower(): getattr(gradients, class_name)
+    for class_name in dir(gradients)
+    if class_name[-8:] == "Backward"
+}
+
+
+def get_backward_func(name):
+    try:
+        f = backward_funcs[name]
+        print(name, 'ok')
+        return f
+    except KeyError:
+        if name not in ('on', 'child', 'id', 'wrap', 'get_class_attributes', 'grad_fn', '__class__', '__str__', 'copy', 'backward', 'requires_grad'):
+            print(name, 'fail')
+        return None

@@ -8,14 +8,21 @@ def forward_grad(tensor):
 
     try:
         grad_fn = tensor.grad_fn
+        print('> grad_fn', grad_fn)
     except AttributeError:
+        print('> grad_fn is none')
         return None
 
     # If a tensor doesn't have a grad_fn already attached to it, that means
     # it's a leaf of the graph and we want to accumulate the gradient
+    print('>? ', tensor)
+    #if not tensor.requires_grad:
+    #    raise MemoryError
     if grad_fn is None and tensor.requires_grad:
+        print('> accumul creater')
         return Accumulate(tensor)
     else:
+        print('> no', grad_fn)
         return grad_fn
 
 
@@ -24,9 +31,12 @@ class GradFunc:
         # This part builds our graph. It takes grad functions (if they exist)
         # from the input arguments and builds a tuple pointing to them. This way
         # we can use .next_functions to traverse through the entire graph.
+        l = [forward_grad(arg) for arg in args]
+        print('++', l)
         self.next_functions = tuple(
-            filter(lambda x: x is not None, [forward_grad(arg) for arg in args])
+            filter(lambda x: x is not None, l)
         )
+        print(self, '=>', self.next_functions )
         self.result = None
 
     def gradient(self, grad):
@@ -48,6 +58,7 @@ class Accumulate:
         self.tensor = tensor
 
     def __call__(self, grad):
+        print('%% update grad', grad.child)
         if self.tensor.grad is not None:
             self.tensor.grad += grad.child
         else:
